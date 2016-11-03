@@ -22,18 +22,26 @@
             navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.mediaDevices.getUserMedia;
 
     function gotSources(sourceInfos) {
-        for (var i = 0; i !== sourceInfos.length; ++i) {
-            var sourceInfo = sourceInfos[i];
-            var option = document.createElement('option');
-            option.value = sourceInfo.id;
-            if (sourceInfo.kind === 'video') {
-                option.text = sourceInfo.label || 'camera ' + (videoSelect.length + 1);
-                videoSelect.appendChild(option);
+        if(sourceInfos) {
+            for (var i = 0; i !== sourceInfos.length; ++i) {
+                var sourceInfo = sourceInfos[i];
+                var option = document.createElement('option');
+                option.value = sourceInfo.id;
+                if (sourceInfo.kind === 'video') {
+                    option.text = sourceInfo.label || 'camera ' + (videoSelect.length + 1);
+                    videoSelect.appendChild(option);
+                }
             }
+        } else {
+
         }
     }
 
-    MediaStreamTrack.getSources(gotSources);
+    if(MediaStreamTrack.getSources) {
+        MediaStreamTrack.getSources(gotSources);
+    } else {
+        start();
+    }
 
 
     function successCallback(stream) {
@@ -55,15 +63,17 @@
         var videoSource = videoSelect.value;
         var constraints = {
             video: {
-                optional: [{
-                    sourceId: videoSource
-                }],
                 mandatory: {
                     minWidth: 1280,
                     minHeight: 720
                 }
             }
         };
+        if(videoSource) {
+            constraints.video.optional = [{
+                sourceId: videoSource
+            }];
+        }
         navigator.getUserMedia(constraints, successCallback, errorCallback);
     }
 
@@ -77,6 +87,7 @@
 
     var qr  = new QrCode();
     qr.callback = function(res, err) {
+        console.timeEnd('snapshot');
         if(err) {
             var resolution = `(${videoElement.width}, ${videoElement.height})`;
             document.getElementById('result').innerHTML='failed' + resolution;
@@ -87,6 +98,7 @@
     };
 
     function snapshot() {
+        console.time('snapshot');
         if (window.stream) {
 
             ctx.drawImage(videoElement, 0, 0);
