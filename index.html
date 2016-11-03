@@ -6,10 +6,6 @@
 </head>
 <body>
 
-<div class="select">
-    <label for="videoSource">Video source: </label><select id="videoSource"></select>
-</div>
-
 <div style="position:relative;">
     <div id="restart" style="display: none; position: absolute; z-index: 2000">
         <div id="result"></div>
@@ -28,7 +24,6 @@
     var interval;
     var working = false;
     var videoElement = document.querySelector('video');
-    var videoSelect = document.querySelector('select#videoSource');
     var canvas = document.querySelector('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -57,12 +52,6 @@
         }
     }
 
-    if (MediaStreamTrack.getSources) {
-        MediaStreamTrack.getSources(gotSources);
-    } else {
-        start();
-    }
-
 
     function successCallback(stream) {
         window.stream = stream; // make stream available to console
@@ -80,25 +69,16 @@
             window.stream.getAudioTracks().forEach(track => track.stop());
             window.stream.getVideoTracks().forEach(track => track.stop())
         }
-        var videoSource = videoSelect.value;
         var constraints = {
             video: {
-                facingMode: 'environment',
                 mandatory: {
                     minWidth: width,
                     minHeight: height
                 }
             }
         };
-        if (videoSource) {
-            constraints.video.optional = [{
-                sourceId: videoSource
-            }];
-        }
         navigator.getUserMedia(constraints, successCallback, errorCallback);
     }
-
-    videoSelect.onchange = start;
 
     start();
 
