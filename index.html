@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <script src="./qrcodeReader.js"></script>
+    <!--<script src="./qrcodeReader.js"></script>-->
+    <script src="./jquery-3.1.1.min.js"></script>
 </head>
 <body>
 
@@ -9,20 +10,39 @@
     <label for="videoSource">Video source: </label><select id="videoSource"></select>
 </div>
 
-<video muted autoplay></video>
-<img src="">
-<canvas width="1280" height="720" style="display:none;"></canvas>
-<div id="result"></div>
+<div style="position:relative;">
+    <div id="restart" style="display: none; position: absolute; z-index: 2000">
+        <div id="result"></div>
+        <input type="button" value="restart"/>
+    </div>
+    <div id="shadow"></div>
+    <video muted autoplay></video>
+</div>
+<!--<img src="">-->
+<canvas style="display:none;"></canvas>
 <script>
-
+    var width = 1280;
+    var height = 720;
+    var crop = 300;
+    createShadow();
+    var interval;
+    var working = false;
     var videoElement = document.querySelector('video');
     var videoSelect = document.querySelector('select#videoSource');
+    var canvas = document.querySelector('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    $('#restart').css({
+        width: width,
+        height: height,
+        backgroundColor: 'white'
+    });
 
     navigator.getUserMedia = navigator.getUserMedia ||
             navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.mediaDevices.getUserMedia;
 
     function gotSources(sourceInfos) {
-        if(sourceInfos) {
+        if (sourceInfos) {
             for (var i = 0; i !== sourceInfos.length; ++i) {
                 var sourceInfo = sourceInfos[i];
                 var option = document.createElement('option');
@@ -37,7 +57,7 @@
         }
     }
 
-    if(MediaStreamTrack.getSources) {
+    if (MediaStreamTrack.getSources) {
         MediaStreamTrack.getSources(gotSources);
     } else {
         start();
@@ -63,13 +83,14 @@
         var videoSource = videoSelect.value;
         var constraints = {
             video: {
+                facingMode: 'environment',
                 mandatory: {
-                    minWidth: 1280,
-                    minHeight: 720
+                    minWidth: width,
+                    minHeight: height
                 }
             }
         };
-        if(videoSource) {
+        if (videoSource) {
             constraints.video.optional = [{
                 sourceId: videoSource
             }];
@@ -81,40 +102,104 @@
 
     start();
 
+    var worker = new Worker('reader-worker.js');
+    worker.onmessage = handleWorkerRead;
+    worker.onerror = handleWorkerError;
+
     // snapshot
-    var canvas = document.querySelector('canvas');
     var ctx = canvas.getContext('2d');
 
-    var qr  = new QrCode();
-    qr.callback = function(res, err) {
-        console.timeEnd('snapshot');
-        if(err) {
-            var resolution = `(${videoElement.width}, ${videoElement.height})`;
-            document.getElementById('result').innerHTML='failed' + resolution;
-        } else {
-            document.getElementById('result').innerHTML=res + resolution;
+    //    var qr  = new QrCode();
+    //    qr.callback = function(res, err) {
+    //        console.timeEnd('snapshot');
+    //        if(err) {
+    //            var resolution = `(${videoElement.width}, ${videoElement.height})`;
+    //            document.getElementById('result').innerHTML='failed' + resolution;
+    //        } else {
+    //            document.getElementById('result').innerHTML=res + resolution;
+    //        }
+    //        console.log(res, err);
+    //    };
+
+    function handleWorkerRead(event) {
+        console.timeEnd('total');
+        console.log(event.data);
+        working = false;
+        if (event.data.res) {
+            stopScanning();
+            $('#result').html(event.data.res);
         }
-        console.log(res, err);
-    };
+    }
+
+    function handleWorkerError(err) {
+        console.error(err);
+    }
 
     function snapshot() {
-        console.time('snapshot');
+        if (working) return;
         if (window.stream) {
+            console.time('total');
+            console.time('snapshot');
 
             ctx.drawImage(videoElement, 0, 0);
             // "image/webp" works in Chrome.
             // Other browsers will fall back to image/png.
-            document.querySelector('img').src = canvas.toDataURL('image/webp');
+//            document.querySelector('img').src = canvas.toDataURL('image/webp');
 
-            var data = ctx.getImageData(0, 0, 1280, 720);
-            console.log(data);
 
-            qr.decode(data);
+            var data = ctx.getImageData((width - crop) / 2, (height - crop) / 2, crop, crop);
+            console.timeEnd('snapshot');
+            working = true;
+            worker.postMessage(data.data.buffer, [data.data.buffer]);
         }
     }
 
-    videoElement.addEventListener('click', snapshot, false);
+    function startScanning() {
+        if(!interval) {
+            interval = setInterval(snapshot, 100);
+        }
+        $('#restart').hide();
+    }
 
+    function stopScanning() {
+        clearInterval(interval);
+        interval = undefined;
+        $('#restart').show();
+    }
+
+    //    videoElement.addEventListener('click', snapshot, false);
+
+    startScanning();
+
+    function createShadow() {
+        var shadow = $('#shadow');
+        // create 4 shadow rect
+        var div1 = getShadowRect(0, 0, (width - crop) / 2, height);
+        var div2 = getShadowRect((width - crop) / 2, 0, crop, (height - crop) / 2);
+        var div3 = getShadowRect((width - crop) / 2, (height + crop) / 2, crop, (height - crop) / 2);
+        var div4 = getShadowRect((width + crop) / 2, 0, (width - crop) / 2, height);
+        shadow.append(div1, div2, div3, div4);
+    }
+
+    function getShadowRect(left, top, w, h) {
+        var div = $('<div>');
+        div.css({
+            backgroundColor: '#000000',
+            position: 'absolute',
+            top: top,
+            left: left,
+            width: w,
+            height: h,
+            zIndex: 1000,
+            opacity: 0.2
+        });
+
+        return div;
+    }
+
+    $('#restart').children('input').on('click', function () {
+        startScanning();
+    });
 </script>
 </body>
 </html>
