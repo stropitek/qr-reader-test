@@ -7,8 +7,8 @@
     <style>
         html, body {
             width: 100%;
-            height:100%;
-            overflow:hidden;
+            height: 100%;
+            overflow: hidden;
             margin: 0;
             padding: 0;
         }
@@ -20,16 +20,21 @@
             -webkit-transform: translateX(-50%) translateY(-50%);
             transform: translateX(-50%) translateY(-50%);
             min-width: 100%;
-            min-height: 100%;
             width: auto;
             height: auto;
             z-index: -1000;
             overflow: hidden;
         }
 
+        #shadow {
+            overflow: visible;
+            z-index: 10000;
+        }
+
     </style>
 </head>
 <body>
+
 
 <div style="position: fixed;z-index: 3000;" class="select">
     <label for="videoSource">Video source: </label><select style="height: 50px;" id="videoSource"></select>
@@ -37,7 +42,7 @@
 <video id="vid" muted autoplay></video>
 
 </div>
-<div style="position:relative;">
+<div style="position:relative; overflow: visible">
     <div id="restart" style="display: none; position: absolute; z-index: 2000; top: 100px;">
         <div id="result"></div>
         <input type="button" value="restart"/>
@@ -50,8 +55,6 @@
 <div id="debug"></div>
 
 <script>
-    var width = 1280;
-    var height = 720;
     var crop = 300;
     $(window).on('orientationchange', createShadow);
     $(window).on('resize', createShadow);
@@ -60,11 +63,9 @@
     var videoElement = document.querySelector('video');
     var videoSelect = document.querySelector('select#videoSource');
     var canvas = document.querySelector('canvas');
-    canvas.width = width;
-    canvas.height = height;
     $('#restart').css({
-        width: width,
-        height: height,
+        width: 500,
+        height: 500,
         backgroundColor: 'white'
     });
 
@@ -116,19 +117,17 @@
         var videoSource = videoSelect.value;
         var constraints = {
             video: {
-                mandatory: {
-                    minWidth: width,
-                    minHeight: height,
-                    maxWidth: width,
-                    maxHeight: height
-                }
-            }
+                width: {min: 1280},
+                height: {min: 720},
+                deviceId: videoSource ? {exact: videoSource} : undefined
+            },
+
         };
-        if (videoSource) {
-            constraints.video.optional = [{
-                sourceId: videoSource
-            }];
-        }
+//        if (videoSource) {
+//            constraints.video.mandatory = [{
+//                sourceId: videoSource
+//            }];
+//        }
         navigator.getUserMedia(constraints, successCallback, errorCallback);
     }
 
@@ -140,24 +139,8 @@
     worker.onmessage = handleWorkerRead;
     worker.onerror = handleWorkerError;
 
-    // snapshot
-    var ctx = canvas.getContext('2d');
-
-    //    var qr  = new QrCode();
-    //    qr.callback = function(res, err) {
-    //        console.timeEnd('snapshot');
-    //        if(err) {
-    //            var resolution = `(${videoElement.width}, ${videoElement.height})`;
-    //            document.getElementById('result').innerHTML='failed' + resolution;
-    //        } else {
-    //            document.getElementById('result').innerHTML=res + resolution;
-    //        }
-    //        console.log(res, err);
-    //    };
 
     function handleWorkerRead(event) {
-        console.timeEnd('total');
-        console.log(event.data);
         working = false;
         if (event.data.res) {
             stopScanning();
@@ -172,24 +155,26 @@
     function snapshot() {
         if (working) return;
         if (window.stream) {
-            console.time('total');
-            console.time('snapshot');
+            var width = videoElement.videoWidth;
+            var height = videoElement.videoHeight;
 
+            canvas.width = width;
+            canvas.height = height;
+            var ctx = canvas.getContext('2d');
             ctx.drawImage(videoElement, 0, 0);
             // "image/webp" works in Chrome.
             // Other browsers will fall back to image/png.
 //            document.querySelector('img').src = canvas.toDataURL('image/webp');
 
-            $('#debug').html('' + $(videoElement).width() + ', ' + $(videoElement).height());
+
             var data = ctx.getImageData((width - crop) / 2, (height - crop) / 2, crop, crop);
-            console.timeEnd('snapshot');
             working = true;
             worker.postMessage(data.data.buffer, [data.data.buffer]);
         }
     }
 
     function startScanning() {
-        if(!interval) {
+        if (!interval) {
             interval = setInterval(snapshot, 100);
         }
         $('#restart').hide();
@@ -203,18 +188,27 @@
 
     //    videoElement.addEventListener('click', snapshot, false);
 
-        startScanning();
+    startScanning();
+
 
     function createShadow() {
-        console.log('create shadow');
-        var w = $('body').width();
-        var h = $('body').height();
+        var width = videoElement.videoWidth;
+        var height = videoElement.videoHeight;
+        var w = Math.max(document.documentElement.clientWidth, window.innerWidth || 0)
+        var h = Math.max(document.documentElement.clientHeight, window.innerHeight || 0)
+//        var w = $(window).width();
+//        var h = $(window).height();
         var vw = $(videoElement).width();
         var vh = $(videoElement).height();
         var ccw = vw * crop / width;
         var cch = vh * crop / height;
         var dw = (vw - w) / 2;
         var dh = (vh - h) / 2;
+
+        $('#debug').html(`
+            resolution : ${width}, ${height} (${(width / height).toFixed(3)})<br>
+            body: ${w}, ${h} (${(w / h).toFixed(3)})<br>
+            video el: ${vw}, ${vh} (${(vw / vh).toFixed(3)})<br>`);
 
         var shadow = $('#shadow');
         shadow.html('');
@@ -238,7 +232,8 @@
             width: w,
             height: h,
             zIndex: 1000,
-            opacity: 0.2
+            opacity: 0.2,
+//            border: 'solid 10px red'
         });
 
         return div;
